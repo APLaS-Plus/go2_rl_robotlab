@@ -1,4 +1,4 @@
-policy_path: "{ROOT_DIR}/deploy/pre_train/go2/go2_moe_cts_16k_16000.pt" # our RobotLab-Go2-v0 run (16384 envs, iter 16000)
+policy_path: "{ROOT_DIR}/deploy/pre_train/go2/go2_moe_cts_16k_16500.pt" # our RobotLab-Go2-v0 run (16384 envs, iter 16500)
 
 xml_path: "{ROOT_DIR}/resources/go2/stairs_and_slope.xml"
 
