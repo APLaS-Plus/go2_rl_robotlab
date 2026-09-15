@@ -9,6 +9,9 @@ from .actor_critic import ActorCritic
 from .actor_critic_cnn import ActorCriticCNN
 from .actor_critic_recurrent import ActorCriticRecurrent
 from .actor_critic_moe_cts import ActorCriticMoECTS
+from .actor_critic_cts import ActorCriticCTS
+from .actor_critic_dreamwaq import ActorCriticDreamWaQ, CENet
+from .actor_critic_him import ActorCriticHIM, HIMEstimator
 from .rnd import RandomNetworkDistillation, resolve_rnd_config
 from .student_teacher import StudentTeacher
 from .student_teacher_recurrent import StudentTeacherRecurrent
@@ -19,6 +22,11 @@ __all__ = [
     "ActorCriticCNN",
     "ActorCriticRecurrent",
     "ActorCriticMoECTS",
+    "ActorCriticCTS",
+    "ActorCriticDreamWaQ",
+    "CENet",
+    "ActorCriticHIM",
+    "HIMEstimator",
     "RandomNetworkDistillation",
     "StudentTeacher",
     "StudentTeacherRecurrent",

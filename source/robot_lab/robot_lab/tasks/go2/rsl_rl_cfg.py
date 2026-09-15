@@ -71,6 +71,7 @@ class RslRlMoeCtsAlgorithmCfg(RslRlPpoAlgorithmCfg):
 @configclass
 class MoECTSRunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "go2_moe_cts"
+    wandb_project = "go2_rl_robotlab"
     class_name = "OnPolicyRunnerCTS"
     num_steps_per_env = 24
     max_iterations = 300000

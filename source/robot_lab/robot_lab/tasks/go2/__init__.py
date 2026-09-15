@@ -28,6 +28,49 @@ gym.register(
     },
 )
 
+# Upstream MoE-CTS CatELU variant.  Keep the Go2 environment and all
+# observation/reward contracts identical to RobotLab-Go2-v0; the runner is the
+# author-provided variant in rsl_rl_cfg.py.
+gym.register(
+    id="RobotLab-Go2-MoECTSCatELU-v0",
+    entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.env_cfg:Go2EnvCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.rsl_rl_cfg:MoECTSCatELURunnerCfg",
+    },
+)
+
+gym.register(
+    id="RobotLab-Go2-DreamWaQ-v0",
+    entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.dreamwaq_env_cfg:Go2DreamWaQEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.dreamwaq_rsl_rl_cfg:DreamWaQRunnerCfg",
+    },
+)
+
+gym.register(
+    id="RobotLab-Go2-HIM-v0",
+    entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.him_env_cfg:Go2HIMEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.him_rsl_rl_cfg:HIMRunnerCfg",
+    },
+)
+
+gym.register(
+    id="RobotLab-Go2-CTS-v0",
+    entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.cts_env_cfg:Go2CTSEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.cts_rsl_rl_cfg:CTSRunnerCfg",
+    },
+)
+
 # The blacklist is used to prevent importing configs from sub-packages
 _BLACKLIST_PKGS = ["utils"]
 # Import all configs in this package

@@ -60,6 +60,17 @@ def export_cts_policy_as_onnx(
     policy_exporter.export(path, filename)
 
 
+def export_dreamwaq_policy_as_jit(policy: object, path: str, filename="policy.pt"):
+    """Export DreamWaQ with a stateful single-frame TorchScript interface."""
+    _TorchDreamWaQPolicyExporter(policy).export(path, filename)
+
+
+def export_dreamwaq_policy_as_onnx(policy: object, path: str, filename="policy.onnx", verbose=False):
+    """Export deterministic DreamWaQ for the stateless C++ deployment interface."""
+    os.makedirs(path, exist_ok=True)
+    _OnnxDreamWaQPolicyExporter(policy, verbose=verbose).export(path, filename)
+
+
 """
 Helper Classes - Private.
 """
@@ -257,6 +268,115 @@ class _OnnxPolicyExporter(torch.nn.Module):
             os.path.join(path, filename),
             export_params=True,
             opset_version=opset_version,
+            verbose=self.verbose,
+            input_names=["obs"],
+            output_names=["actions"],
+            dynamic_axes={},
+        )
+
+
+class _DreamWaQPolicyExporterBase(torch.nn.Module):
+    """Common deterministic DreamWaQ deployment network."""
+
+    def __init__(self, policy):
+        assert not policy.is_recurrent, "DreamWaQ policy should not be recurrent"
+        super().__init__()
+        self.actor = copy.deepcopy(policy.actor)
+        self.cenet_encoder = copy.deepcopy(policy.cenet.encoder)
+        self.num_actions = int(policy.num_actions)
+        self.num_single_obs = int(policy.num_single_obs)
+        self.num_actor_obs = int(policy.num_actor_obs)
+        self.history_len = int(policy.history_length)
+        self.latent_dim = int(policy.latent_dim)
+        self.state_dependent_std = bool(policy.state_dependent_std)
+        self.feature_dims = [int(dim) for dim in policy.history_feature_dims]
+        if sum(self.feature_dims) != self.num_single_obs:
+            raise ValueError("DreamWaQ feature dimensions do not match the single observation dimension.")
+
+    def _latest_frame(self, history: torch.Tensor) -> torch.Tensor:
+        terms = []
+        offset = 0
+        for dim in self.feature_dims:
+            end = offset + dim * self.history_len
+            terms.append(history[:, end - dim : end])
+            offset = end
+        return torch.cat(terms, dim=-1)
+
+    def _action_from_history(self, history: torch.Tensor) -> torch.Tensor:
+        params = self.cenet_encoder(history)
+        estimated_velocity = params[:, :3]
+        context_mean = params[:, 3 : 3 + self.latent_dim]
+        actor_input = torch.cat((self._latest_frame(history), estimated_velocity, context_mean), dim=-1)
+        if self.state_dependent_std:
+            return self.actor(actor_input)[..., 0, :]
+        return self.actor(actor_input)
+
+
+class _TorchDreamWaQPolicyExporter(_DreamWaQPolicyExporterBase):
+    """Single-frame JIT wrapper with term-major history and deterministic context."""
+
+    def __init__(self, policy):
+        super().__init__(policy)
+        self.register_buffer("obs_history", torch.zeros(1, self.num_actor_obs, dtype=torch.float32))
+        self.register_buffer("history_initialized", torch.zeros(1, dtype=torch.bool))
+
+    def forward(self, single_obs: torch.Tensor) -> torch.Tensor:
+        if single_obs.dim() == 1:
+            single_obs = single_obs.unsqueeze(0)
+        if single_obs.shape[-1] != self.num_single_obs:
+            raise ValueError("Unexpected DreamWaQ single observation dimension.")
+        if single_obs.shape[0] != 1:
+            raise ValueError("TorchScript DreamWaQ deployment supports batch size 1 only.")
+
+        next_history = self.obs_history.clone()
+        history_offset = 0
+        single_offset = 0
+        for dim in self.feature_dims:
+            block_end = history_offset + dim * self.history_len
+            single_end = single_offset + dim
+            block = self.obs_history[:, history_offset:block_end]
+            shifted = torch.cat((block[:, dim:], single_obs[:, single_offset:single_end]), dim=-1)
+            repeated = single_obs[:, single_offset:single_end].repeat(1, self.history_len)
+            next_history[:, history_offset:block_end] = torch.where(
+                self.history_initialized.view(1, 1), shifted, repeated
+            )
+            history_offset = block_end
+            single_offset = single_end
+        self.obs_history.copy_(next_history)
+        self.history_initialized.fill_(True)
+        return self._action_from_history(self.obs_history)
+
+    @torch.jit.export
+    def reset(self):
+        self.obs_history.zero_()
+        self.history_initialized.zero_()
+
+    def export(self, path, filename):
+        os.makedirs(path, exist_ok=True)
+        self.to("cpu").eval()
+        torch.jit.script(self).save(os.path.join(path, filename))
+
+
+class _OnnxDreamWaQPolicyExporter(_DreamWaQPolicyExporterBase):
+    """Stateless term-major history wrapper for unitree_cpp_deploy."""
+
+    def __init__(self, policy, verbose=False):
+        super().__init__(policy)
+        self.verbose = verbose
+
+    def forward(self, history: torch.Tensor) -> torch.Tensor:
+        if history.dim() == 1:
+            history = history.unsqueeze(0)
+        return self._action_from_history(history)
+
+    def export(self, path, filename):
+        self.to("cpu").eval()
+        torch.onnx.export(
+            self,
+            torch.zeros(1, self.num_actor_obs),
+            os.path.join(path, filename),
+            export_params=True,
+            opset_version=18,
             verbose=self.verbose,
             input_names=["obs"],
             output_names=["actions"],

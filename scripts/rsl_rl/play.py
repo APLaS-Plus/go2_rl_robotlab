@@ -23,7 +23,12 @@ from isaaclab.app import AppLauncher
 
 # local imports
 import cli_args  # isort: skip
-from utils import export_cts_policy_as_jit, export_cts_policy_as_onnx
+from utils import (
+    export_cts_policy_as_jit,
+    export_cts_policy_as_onnx,
+    export_dreamwaq_policy_as_jit,
+    export_dreamwaq_policy_as_onnx,
+)
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
@@ -46,6 +51,7 @@ parser.add_argument(
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 parser.add_argument("--keyboard", action="store_true", default=False, help="Whether to use keyboard.")
 parser.add_argument("--fix_commands", action="store_true", default=False, help="Fix the velocity commands.")
+parser.add_argument("--export-only", action="store_true", default=False, help="Export the checkpoint and exit.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -69,7 +75,7 @@ import gymnasium as gym
 import time
 import torch
 # from scripts.reinforcement_learning.utils import camera_follow
-from rsl_rl.runners import DistillationRunner, OnPolicyRunner, OnPolicyRunnerCTS
+from rsl_rl.runners import DistillationRunner, OnPolicyRunner, OnPolicyRunnerCTS, OnPolicyRunnerDreamWaQ
 
 from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
 from isaaclab.envs import (
@@ -200,6 +206,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     elif agent_cfg.class_name == "OnPolicyRunnerCTS":
         runner = OnPolicyRunnerCTS(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerDreamWaQ":
+        runner = OnPolicyRunnerDreamWaQ(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerHIM":
+        from rsl_rl.runners import OnPolicyRunnerHIM
+
+        runner = OnPolicyRunnerHIM(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.load(resume_path)
@@ -229,9 +241,21 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if agent_cfg.class_name == "OnPolicyRunnerCTS":
         export_cts_policy_as_jit(policy_nn, actor_obs_normalizer=policy_nn.actor_obs_normalizer, single_obs_normalizer=policy_nn.single_obs_normalizer, path=export_model_dir, filename="policy.pt")
         export_cts_policy_as_onnx(policy_nn, actor_obs_normalizer=policy_nn.actor_obs_normalizer, single_obs_normalizer=policy_nn.single_obs_normalizer, path=export_model_dir, filename="policy.onnx")
+    elif agent_cfg.class_name == "OnPolicyRunnerDreamWaQ":
+        export_dreamwaq_policy_as_jit(policy_nn, path=export_model_dir, filename="policy.pt")
+        export_dreamwaq_policy_as_onnx(policy_nn, path=export_model_dir, filename="policy.onnx")
+    elif agent_cfg.class_name == "OnPolicyRunnerHIM":
+        # HIM deployment needs a dedicated exporter (module-side time-major history layout);
+        # not implemented yet — skip instead of failing the play run.
+        print("[INFO]: HIM policy jit/onnx export is not implemented yet; skipping export.")
     else:
         export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
         export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+
+    if args_cli.export_only:
+        print(f"[INFO]: Exported policy to: {export_model_dir}")
+        env.close()
+        return
 
     dt = env.unwrapped.step_dt
 

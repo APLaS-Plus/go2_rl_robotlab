@@ -200,6 +200,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner = DistillationRunner(env, agent_cfg_dict, log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "OnPolicyRunnerCTS":
         runner = OnPolicyRunnerCTS(env, agent_cfg_dict, log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerDreamWaQ":
+        from rsl_rl.runners import OnPolicyRunnerDreamWaQ
+
+        runner = OnPolicyRunnerDreamWaQ(env, agent_cfg_dict, log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.class_name == "OnPolicyRunnerHIM":
+        from rsl_rl.runners import OnPolicyRunnerHIM
+
+        runner = OnPolicyRunnerHIM(env, agent_cfg_dict, log_dir=log_dir, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     # write git state to logs

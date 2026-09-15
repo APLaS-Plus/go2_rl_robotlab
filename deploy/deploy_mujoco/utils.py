@@ -24,8 +24,11 @@ class CTSPolicyInputs(NamedTuple):
     single_obs: torch.Tensor
 
 
-def load_config(config_name: str):
-    with (CONFIG_DIR / config_name).open("r", encoding="utf-8") as file:
+def load_config(config_name: str | Path):
+    config_path = Path(config_name)
+    if not config_path.is_absolute() and not config_path.is_file():
+        config_path = CONFIG_DIR / config_path
+    with config_path.open("r", encoding="utf-8") as file:
         raw = yaml.safe_load(file)
 
     def path_value(name: str) -> Path:
@@ -46,6 +49,9 @@ def load_config(config_name: str):
         "save_video": bool(raw.get("save_video", False)),
         "render_fps": int(raw.get("render_fps", 60)),
         "video_fps": int(raw.get("video_fps", 50)),
+        "self_collisions": str(raw.get("self_collisions", "asset")),
+        "use_model_torque_limits": bool(raw.get("use_model_torque_limits", False)),
+        "policy_update_before_step": bool(raw.get("policy_update_before_step", False)),
     }
     if data["delay_min"] < 0 or data["delay_max"] < data["delay_min"]:
         raise ValueError(f"Invalid actuator delay range: min={data['delay_min']}, max={data['delay_max']}.")
@@ -69,20 +75,58 @@ def load_config(config_name: str):
         "ang_vel_scale",
         "dof_pos_scale",
         "dof_vel_scale",
-        "action_pos_scale",
         "action_vel_scale",
     ):
         if name in raw:
             data[name] = float(raw[name])
 
-    idx_model2mj = idx_mj2model = np.arange(data["num_actions"], dtype=np.int64)
+    # Most policies use a scalar action scale.  The legacy UniLab checkpoint
+    # used a smaller hip scale, so also allow a vector in policy-action order.
+    action_pos_scale = np.asarray(raw["action_pos_scale"], dtype=np.float32)
+    if action_pos_scale.ndim == 0:
+        data["action_pos_scale"] = float(action_pos_scale)
+    elif action_pos_scale.shape == (data["num_actions"],):
+        data["action_pos_scale"] = action_pos_scale
+    else:
+        raise ValueError(
+            "action_pos_scale must be a scalar or have one entry per action, "
+            f"got shape {action_pos_scale.shape}."
+        )
+
+    if data["self_collisions"] not in {"asset", "training-disabled"}:
+        raise ValueError(
+            "self_collisions must be 'asset' or 'training-disabled', got "
+            f"{data['self_collisions']!r}."
+        )
+
+    idx_mj2obs = idx_action2mj = idx_mj2action = np.arange(
+        data["num_actions"], dtype=np.int64
+    )
     if "mujoco_joint_names" in raw and "model_joint_names" in raw:
         mj_names = raw["mujoco_joint_names"]
-        model_names = raw["model_joint_names"]
-        idx_model2mj = np.asarray([model_names.index(name) for name in mj_names], dtype=np.int64)
-        idx_mj2model = np.asarray([mj_names.index(name) for name in model_names], dtype=np.int64)
-    data["idx_model2mj"] = idx_model2mj
-    data["idx_mj2model"] = idx_mj2model
+        action_names = raw["model_joint_names"]
+        observation_names = raw.get("observation_joint_names", action_names)
+        expected = data["num_actions"]
+        for label, names in (
+            ("mujoco_joint_names", mj_names),
+            ("model_joint_names", action_names),
+            ("observation_joint_names", observation_names),
+        ):
+            if len(names) != expected or len(set(names)) != expected or set(names) != set(mj_names):
+                raise ValueError(
+                    f"{label} must contain each of the {expected} MuJoCo joint names exactly once."
+                )
+        # State positions/velocities and policy output/last-action may use
+        # different orders.  Old UniLab has D=FL/FR/RL/RR state features but
+        # A=FR/FL/RR/RL actions, whereas RobotLab normally uses one order.
+        idx_mj2obs = np.asarray([mj_names.index(name) for name in observation_names], dtype=np.int64)
+        idx_action2mj = np.asarray([mj_names.index(name) for name in action_names], dtype=np.int64)
+        idx_mj2action = np.asarray([action_names.index(name) for name in mj_names], dtype=np.int64)
+        data["mujoco_joint_names"] = list(mj_names)
+        data["model_joint_names"] = list(action_names)
+    data["idx_mj2obs"] = idx_mj2obs
+    data["idx_action2mj"] = idx_action2mj
+    data["idx_mj2action"] = idx_mj2action
     return SimpleNamespace(**data)
 
 
@@ -105,13 +149,23 @@ def pd_control(target_q: np.ndarray, q: np.ndarray, kp: np.ndarray,
 
 def init_joystick():
     pygame.init()
-    if pygame.joystick.get_count() == 0:
+    joystick_count = pygame.joystick.get_count()
+    if joystick_count == 0:
         print("No Joystick detected. Using default commands from config.")
         return None
-    joystick = pygame.joystick.Joystick(0)
-    joystick.init()
-    print(f"Detected Joystick: {joystick.get_name()}")
-    return joystick
+
+    for index in range(joystick_count):
+        joystick = pygame.joystick.Joystick(index)
+        joystick.init()
+        if "vjoy" in joystick.get_name().casefold():
+            print(f"Ignoring virtual joystick: {joystick.get_name()}")
+            joystick.quit()
+            continue
+        print(f"Detected Joystick: {joystick.get_name()}")
+        return joystick
+
+    print("No physical Joystick detected. Using default commands from config.")
+    return None
 
 
 def read_joystick_command(joystick, max_cmd: np.ndarray) -> np.ndarray:
