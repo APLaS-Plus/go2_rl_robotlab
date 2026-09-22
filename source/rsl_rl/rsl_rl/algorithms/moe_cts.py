@@ -15,6 +15,7 @@ import itertools
 from rsl_rl.modules import ActorCriticMoECTS
 from rsl_rl.modules.rnd import RandomNetworkDistillation
 from rsl_rl.storage import RolloutStorageCTS
+from rsl_rl.utils import resolve_optimizer
 
 
 class MoECTS:
@@ -40,6 +41,7 @@ class MoECTS:
         load_balance_coef: float = 0.01,
         learning_rate: float = 0.001,
         student_encoder_learning_rate: float = 0.001,
+        optimizer: str = "adam",
         max_grad_norm: float = 1.0,
         use_clipped_value_loss: bool = True,
         schedule: str = "adaptive",
@@ -97,8 +99,16 @@ class MoECTS:
             {"params": self.policy.actor.parameters()},
             {"params": getattr(self.policy, 'std', getattr(self.policy, 'log_std', []))}
         ]
-        self.optimizer = optim.Adam(params1, lr=learning_rate, betas=betas, weight_decay=weight_decay)
-        self.optimizer_stu_enc = optim.Adam(self.policy.student_moe_encoder.parameters(), lr=student_encoder_learning_rate, betas=betas, weight_decay=weight_decay)
+        optimizer_cls = resolve_optimizer(optimizer)
+        # Adam / AdamW accept `betas`; SGD / RMSprop do not.
+        betas_kwargs = {"betas": betas} if optimizer in ("adam", "adamw") else {}
+        self.optimizer = optimizer_cls(params1, lr=learning_rate, weight_decay=weight_decay, **betas_kwargs)
+        self.optimizer_stu_enc = optimizer_cls(
+            self.policy.student_moe_encoder.parameters(),
+            lr=student_encoder_learning_rate,
+            weight_decay=weight_decay,
+            **betas_kwargs,
+        )
 
         # Add storage
         self.storage = storage

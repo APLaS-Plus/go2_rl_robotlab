@@ -216,7 +216,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
-        runner.load(resume_path)
+        # `reset_optimizer` (optimizer-ablation runs): load the weights only and
+        # keep the freshly created optimizer, otherwise the checkpoint's
+        # optimizer state (e.g. Adam moments) would overwrite the new optimizer's
+        # param groups and crash it (missing 'momentum' key for SGD).
+        runner.load(resume_path, load_optimizer=not getattr(agent_cfg, "reset_optimizer", False))
 
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

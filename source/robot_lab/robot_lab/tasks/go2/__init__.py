@@ -41,6 +41,18 @@ gym.register(
     },
 )
 
+# SGD optimizer ablation of RobotLab-Go2-v0: identical environment, curriculum
+# and hyper-parameters; only the optimizer type differs (experiment only).
+gym.register(
+    id="RobotLab-Go2-MoECTSSGD-v0",
+    entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.env_cfg:Go2EnvCfg",
+        "rsl_rl_cfg_entry_point": f"{__name__}.rsl_rl_cfg:MoECTSSGDRunnerCfg",
+    },
+)
+
 gym.register(
     id="RobotLab-Go2-DreamWaQ-v0",
     entry_point="robot_lab.tasks.go2.env.go2_env:Go2Env",

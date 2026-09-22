@@ -59,6 +59,7 @@ class RslRlMoeCtsAlgorithmCfg(RslRlPpoAlgorithmCfg):
     num_mini_batches = 4
     learning_rate = 1e-3
     student_encoder_learning_rate = 1e-3
+    optimizer = "adam"
     schedule = "adaptive"
     gamma = 0.99
     lam = 0.95
@@ -76,6 +77,7 @@ class MoECTSRunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 300000
     save_interval = 500
+    reset_optimizer = False  # True: resume weights only, keep the fresh optimizer
     policy = RslRlMoeCtsActorCriticCfg()
     algorithm = RslRlMoeCtsAlgorithmCfg()
 
@@ -85,3 +87,14 @@ class MoECTSCatELURunnerCfg(MoECTSRunnerCfg):
     def __post_init__(self):
         super().__post_init__()
         self.policy.activation = 'cat_elu'
+
+# SGD optimizer ablation: identical environment / curriculum / hyper-parameters as
+# RobotLab-Go2-v0, only the optimizer type differs (single-variable experiment).
+@configclass
+class MoECTSSGDRunnerCfg(MoECTSRunnerCfg):
+    experiment_name = "go2_moe_cts_sgd"
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.algorithm.optimizer = "sgd"
+        self.reset_optimizer = True
