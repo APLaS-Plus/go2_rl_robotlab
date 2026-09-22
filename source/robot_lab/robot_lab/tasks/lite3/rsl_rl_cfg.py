@@ -1,0 +1,66 @@
+from isaaclab.utils import configclass
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+
+
+@configclass
+class RslRlMoeCtsActorCriticCfg(RslRlPpoActorCriticCfg):
+    """Lite3 MoE-CTS actor/critic configuration.
+
+    网络结构（expert 数、latent 维度、各 encoder 隐层）与 RobotLab Go2 的
+    MoE-CTS 完全一致，只把 num_actions 对应的动作维度交给 Lite3 的 12 关节
+    （与 Go2 相同，因此网络维度无需改动）。
+    """
+
+    class_name = "ActorCriticMoECTS"
+    init_noise_std = 1.0
+    expert_num = 8  # number of experts in the student model
+    latent_dim = 32
+    norm_type = "l2norm"  # normalization type for encoders: l2norm, simnorm
+    teacher_encoder_hidden_dims = [512, 256]
+    student_encoder_hidden_dims = [512, 256, 256]
+    actor_hidden_dims = [512, 256, 128]
+    critic_hidden_dims = [512, 256, 128]
+    activation = "elu"
+    actor_obs_normalization = False
+    critic_obs_normalization = False
+
+
+@configclass
+class RslRlMoeCtsAlgorithmCfg(RslRlPpoAlgorithmCfg):
+    class_name = "MoECTS"
+    value_loss_coef = 1.0
+    load_balance_coef = 0.01  # coefficient for load balance loss
+    use_clipped_value_loss = True
+    clip_param = 0.2
+    entropy_coef = 0.01
+    num_learning_epochs = 5
+    num_mini_batches = 4
+    learning_rate = 1e-3
+    student_encoder_learning_rate = 1e-3
+    optimizer = "adam"
+    schedule = "adaptive"
+    gamma = 0.99
+    lam = 0.95
+    betas = (0.9, 0.999)
+    weight_decay = 0.0
+    desired_kl = 0.01
+    max_grad_norm = 1.0
+    teacher_env_ratio = 0.75  # percentage of envs assigned to teacher
+
+
+@configclass
+class MoECTSRunnerCfg(RslRlOnPolicyRunnerCfg):
+    """Lite3 MoE-CTS training configuration.
+
+    物理参数来自 money12532/Lite3_RL_Project，奖励与超参沿用 RobotLab Go2。
+    """
+
+    experiment_name = "lite3_moe_cts"
+    wandb_project = "go2_rl_robotlab"
+    class_name = "OnPolicyRunnerCTS"
+    num_steps_per_env = 24
+    max_iterations = 300000
+    save_interval = 500
+    reset_optimizer = False  # True: resume weights only, keep the fresh optimizer
+    policy = RslRlMoeCtsActorCriticCfg()
+    algorithm = RslRlMoeCtsAlgorithmCfg()
