@@ -432,7 +432,7 @@ class RewardsCfg:
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh|.*_calf"), "threshold": 5.0},
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_THIGH|.*_SHANK"), "threshold": 5.0},
     )
     joint_pos_limits = RewTerm(
         func=mdp.joint_pos_limits,
