@@ -182,6 +182,15 @@ The default task settings are defined in the following files:
    source/robot_lab/robot_lab/tasks/go2/__init__.py
    ```
 
+### Available Tasks
+
+| Task ID | Robot | Notes |
+|---|---|---|
+| `RobotLab-Go2-v0` | Unitree Go2 | Upstream default, MoE-CTS |
+| `RobotLab-Lite3-v0` | Deep Robotics Lite3 | Added 2026-09-23, reuses Go2's env class and MoE-CTS network; only physical parameters and terrain vertical difficulty differ. See [docs/lite3-porting.md](docs/lite3-porting.md) |
+
+To add a new robot, copy `tasks/go2/` to `tasks/<robot>/` and change the asset + physical parameters. Keep the observation contract and reward functions unchanged unless you have a specific reason.
+
 ### Runtime Overrides
 
 In addition to the default configuration files, `train.py` and `play.py` supports several command-line arguments for runtime overrides:
