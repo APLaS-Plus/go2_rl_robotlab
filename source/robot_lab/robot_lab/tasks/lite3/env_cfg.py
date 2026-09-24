@@ -50,7 +50,9 @@ TERRAIN_HEIGHT_SCALE = LITE3_BODY_HEIGHT_REF / GO2_BODY_HEIGHT_REF  # ~ 0.98684
 
 # Lite3 目标站立高度：直接取自 money12532/Lite3_RL_Project 的 rough 训练配置
 # (rough_env_cfg.py: rewards.base_height_l2.params["target_height"] = 0.55)。
-BASE_HEIGHT_TARGET = 0.55
+# 2026-09-25 修正：该 0.55 为上游误值（官方站高规格 0.406 m；MJCF 正解站姿 0.3485 m、
+# 膝限位极限 ≈0.42 m；上游提交 61443d28 把原 0.35 误改后一直未复核）→ 改回 0.35。
+BASE_HEIGHT_TARGET = 0.35
 
 
 ##
